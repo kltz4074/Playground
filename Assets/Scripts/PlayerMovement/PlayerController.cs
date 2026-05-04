@@ -12,7 +12,7 @@ public class PlayerController : MonoBehaviour
     [SerializeField] private float jumpForce = 5f;
 
     [SerializeField] private float groundCheckDistance = 0.1f;
-    [SerializeField] private LayerMask groundLayer = ~0; // optional: restrict to ground layers
+    [SerializeField] private LayerMask groundLayer = ~0;
 
     [Header("Camera")]
     [SerializeField] private float MouseSensitivity = 100f;
@@ -22,7 +22,6 @@ public class PlayerController : MonoBehaviour
 
     private Rigidbody rb;
     private PlayerInput playerInput;
-    private GameObject Player;
     private CapsuleCollider capsule;
 
     private InputAction sprintAction;
@@ -33,9 +32,6 @@ public class PlayerController : MonoBehaviour
     private float currentSpeed;
     private bool isSprinting;
     private bool isGrounded;
-    private bool isMobile;
-
-    private float MouseX, MouseY;
     float xClamp = 85f;
     float xRotation;
 
@@ -46,7 +42,6 @@ public class PlayerController : MonoBehaviour
         rb = GetComponent<Rigidbody>();
         playerInput = GetComponent<PlayerInput>();
         capsule = GetComponent<CapsuleCollider>();
-        Player = gameObject;
         if (PlayerCamera == null) PlayerCamera = Camera.main;
 
         Cursor.lockState = CursorLockMode.Locked;
@@ -69,17 +64,14 @@ public class PlayerController : MonoBehaviour
 
     private void FixedUpdate()
     {
-        // Poll sprint action so sprint reliably reflects the current button state.
         if (playerInput != null && playerInput.actions != null)
         {
-            var sprintAction = playerInput.actions.FindAction("Sprint", true);
             if (sprintAction != null)
             {
                 isSprinting = sprintAction.IsPressed();
             }
         }
 
-        // Ground check every physics frame (capsule check every FixedUpdate).
         GroundCheck();
 
         currentSpeed = isSprinting ? sprintSpeed : moveSpeed;

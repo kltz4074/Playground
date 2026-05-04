@@ -3,7 +3,7 @@
     "name": "PlayerInput",
     "maps": [
         {
-            "name": "Movement",
+            "name": "Gameplay",
             "id": "ee328fb5-427a-47c7-94b8-2af8ca27e2d4",
             "actions": [
                 {
@@ -46,6 +46,15 @@
                     "name": "Sprint",
                     "type": "Button",
                     "id": "2d7e956d-014c-404a-8f64-56b61fb63975",
+                    "expectedControlType": "",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                },
+                {
+                    "name": "Interact",
+                    "type": "Button",
+                    "id": "db350531-f215-4926-93f1-8ff894b77a8c",
                     "expectedControlType": "",
                     "processors": "",
                     "interactions": "",
@@ -206,32 +215,37 @@
                     "action": "Sprint",
                     "isComposite": false,
                     "isPartOfComposite": false
-                }
-            ]
-        },
-        {
-            "name": "Touchpad",
-            "id": "607b8af1-c6d9-496b-8d73-031deb8460a4",
-            "actions": [
-                {
-                    "name": "MobileTouch",
-                    "type": "Button",
-                    "id": "f4e247bb-93a8-4124-8561-0e0a7ab1741a",
-                    "expectedControlType": "",
-                    "processors": "",
-                    "interactions": "",
-                    "initialStateCheck": false
-                }
-            ],
-            "bindings": [
+                },
                 {
                     "name": "",
-                    "id": "be835012-f926-4a95-99af-9993383e2936",
-                    "path": "<Touchscreen>/primaryTouch/press",
+                    "id": "da09866a-de02-4b36-a4cc-4218c820e812",
+                    "path": "<Gamepad>/leftTrigger",
                     "interactions": "",
                     "processors": "",
                     "groups": "",
-                    "action": "MobileTouch",
+                    "action": "Interact",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "3149eb20-ffda-40bc-95a4-3f3681a7766d",
+                    "path": "<Keyboard>/e",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "Interact",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "8bcd5045-b71b-42b9-8073-806f4205781f",
+                    "path": "<Mouse>/leftButton",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "Interact",
                     "isComposite": false,
                     "isPartOfComposite": false
                 }
