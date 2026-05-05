@@ -3,6 +3,7 @@ using Unity.VisualScripting;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using System;
+using System.Runtime.CompilerServices;
 
 public class InteractionSystem : MonoBehaviour
 {
@@ -10,15 +11,24 @@ public class InteractionSystem : MonoBehaviour
     [SerializeField] private float interactionRange = 3f;
     [SerializeField] private PlayerInput playerInput;
     [SerializeField] private InteractionSystemCursor cursor;
-    [SerializeField] private GameObject ObjectParent;
     [Space]
-    [Header("Non-Editable variables")]
-    [ReadOnly] [SerializeField] private IItem HoldingItem;
+    [Header("Item Holding")]
+    [SerializeField] private float itemHoldDistance = 2f;
+    [SerializeField] private float itemHoldHeight = -0.5f;
+    [SerializeField] private float itemHoldWidth = 0.5f;
 
+    [SerializeField] private float itemFollowPos = 0.1f;
+    [SerializeField] private float itemRotationSpeed = 720f;
+    
+    [SerializeField] private GameObject ObjectParent;
+    
+    private IItem HoldingItem;
     private InputAction interactAction;
     private InputAction dropItemAction;
 
     private Ray ray;
+    private Vector3 itemPositionVelocity = Vector3.zero;
+
     private void Start()
     {
         playerCamera ??= Camera.main;
@@ -47,11 +57,7 @@ public class InteractionSystem : MonoBehaviour
 
         if (WasPressed(dropItemAction, () => mouse?.rightButton.wasPressedThisFrame ?? false))
         {
-            if (HoldingItem != null)
-            {
-                HoldingItem.OnDrop();
-                HoldingItem = null;
-            }
+            DropCurrentItem();
             return;
         }
 
@@ -82,13 +88,80 @@ public class InteractionSystem : MonoBehaviour
         if (interactable is IItem itemComp)
         {
             HoldingItem = itemComp;
+            itemComp.gameObject.GetComponent<Collider>().enabled = false; 
         }
 
         interactable.OnInteract();
     }
 
+    public void FixedUpdate()
+    {
+        UpdateObjectParentPosition();
+        if (HoldingItem != null && HoldingItem.gameObject != null) 
+            UpdateHoldObject();
+    }
+     
     private bool WasPressed(InputAction action, Func<bool> fallback)
     {
         return action != null ? action.triggered : (fallback?.Invoke() ?? false);
+    }
+
+    public void DropCurrentItem()
+    {
+        if (HoldingItem != null)
+        {
+            if (HoldingItem.gameObject.GetComponent<Collider>() is Collider col)
+            {
+                col.enabled = true;
+            } 
+            if (HoldingItem.gameObject.GetComponent<Rigidbody>() is Rigidbody rb)
+            {
+                rb.isKinematic = false;
+                rb.useGravity = true;
+                rb.linearVelocity = playerCamera.transform.forward * 2f;
+            }
+            HoldingItem.OnDrop();
+
+            HoldingItem = null; 
+        }
+    }
+
+
+    public void UpdateObjectParentPosition()
+    {
+        if (ObjectParent != null)
+        {
+            ObjectParent.transform.position = playerCamera.transform.position + playerCamera.transform.forward * itemHoldDistance + playerCamera.transform.up * itemHoldHeight + playerCamera.transform.right * itemHoldWidth;
+            ObjectParent.transform.rotation = playerCamera.transform.rotation;
+        }
+    }
+
+    public void UpdateHoldObject()
+    {
+        if (HoldingItem == null)
+            return;
+
+        GameObject item = HoldingItem.gameObject;
+        if (item == null || ObjectParent == null)
+            return;
+
+        Rigidbody rb = item.GetComponent<Rigidbody>();
+        if (rb != null)
+            rb.isKinematic = true;
+
+        float smoothTime = Mathf.Max(0.0001f, itemFollowPos);
+
+        item.transform.position = Vector3.SmoothDamp(
+            item.transform.position,
+            ObjectParent.transform.position,
+            ref itemPositionVelocity,
+            smoothTime,
+            Mathf.Infinity,
+            Time.fixedDeltaTime
+        );
+
+        Quaternion targetRotation = ObjectParent.transform.rotation;
+        float maxDegreesThisStep = itemRotationSpeed * Time.fixedDeltaTime;
+        item.transform.rotation = Quaternion.RotateTowards(item.transform.rotation, targetRotation, maxDegreesThisStep);
     }
 }
