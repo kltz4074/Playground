@@ -12,8 +12,8 @@ GameObject:
   - component: {fileID: 8391130298785785145}
   - component: {fileID: 7060190178755467974}
   - component: {fileID: 5598767149564557485}
-  - component: {fileID: -8891196263048155182}
   - component: {fileID: -3308236412290263441}
+  - component: {fileID: 3671227481070596456}
   m_Layer: 0
   m_Name: Cube
   m_TagString: Untagged
@@ -114,19 +114,6 @@ BoxCollider:
   serializedVersion: 3
   m_Size: {x: 1, y: 1, z: 1}
   m_Center: {x: 0, y: 0, z: 0}
---- !u!114 &-8891196263048155182
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 3292437706731074504}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 56da3b4f01c7f554daa7bc7884b68298, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::IInteractable
-  item: {fileID: 11400000, guid: 17cf3d9f95b461d44877f833555bc93f, type: 2}
 --- !u!54 &-3308236412290263441
 Rigidbody:
   m_ObjectHideFlags: 0
@@ -154,3 +141,16 @@ Rigidbody:
   m_Interpolate: 0
   m_Constraints: 0
   m_CollisionDetection: 0
+--- !u!114 &3671227481070596456
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3292437706731074504}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2a8b625ae7f1b04419d5c048ce321deb, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::IItem
+  item: {fileID: 11400000, guid: 17cf3d9f95b461d44877f833555bc93f, type: 2}

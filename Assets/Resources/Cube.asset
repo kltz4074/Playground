@@ -14,4 +14,4 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::Item
   itemName: Cube
   Prefab: {fileID: 3292437706731074504, guid: 71e8bfbfa4c559342abe2a1f986df630, type: 3}
-  description: Just a cube
+  description: Just cube

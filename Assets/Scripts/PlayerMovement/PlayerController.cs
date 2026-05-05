@@ -154,7 +154,6 @@ public class PlayerController : MonoBehaviour
         RaycastHit hit;
         isGrounded = Physics.Raycast(rayOrigin, -up, out hit, rayDistance, groundLayer, QueryTriggerInteraction.Ignore);
 
-        // debug
         Color debugColor = isGrounded ? Color.green : Color.red;
         Debug.DrawLine(capTop, capBottom, debugColor);
         Debug.DrawRay(rayOrigin, -up * rayDistance, debugColor);
