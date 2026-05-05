@@ -17,14 +17,15 @@ public class InteractionSystem : MonoBehaviour
     [SerializeField] private float itemHoldHeight = -0.5f;
     [SerializeField] private float itemHoldWidth = 0.5f;
 
-    [SerializeField] private float itemFollowPos = 0.1f;
+    [SerializeField] private float itemFollowSpeed = 0.1f;
     [SerializeField] private float itemRotationSpeed = 720f;
-    
+
     [SerializeField] private GameObject ObjectParent;
-    
+
     private IItem HoldingItem;
     private InputAction interactAction;
     private InputAction dropItemAction;
+    private Collider playerCollider;
 
     private Ray ray;
     private Vector3 itemPositionVelocity = Vector3.zero;
@@ -32,6 +33,7 @@ public class InteractionSystem : MonoBehaviour
     private void Start()
     {
         playerCamera ??= Camera.main;
+        playerCollider = GetComponent<Collider>();
 
         if (playerInput == null)
             return;
@@ -88,7 +90,11 @@ public class InteractionSystem : MonoBehaviour
         if (interactable is IItem itemComp)
         {
             HoldingItem = itemComp;
-            itemComp.gameObject.GetComponent<Collider>().enabled = false; 
+            Collider itemCollider = itemComp.gameObject.GetComponent<Collider>();
+            if (itemCollider != null && playerCollider != null)
+            {
+                Physics.IgnoreCollision(itemCollider, playerCollider, true);
+            }
         }
 
         interactable.OnInteract();
@@ -97,10 +103,10 @@ public class InteractionSystem : MonoBehaviour
     public void FixedUpdate()
     {
         UpdateObjectParentPosition();
-        if (HoldingItem != null && HoldingItem.gameObject != null) 
+        if (HoldingItem != null && HoldingItem.gameObject != null)
             UpdateHoldObject();
     }
-     
+
     private bool WasPressed(InputAction action, Func<bool> fallback)
     {
         return action != null ? action.triggered : (fallback?.Invoke() ?? false);
@@ -110,10 +116,12 @@ public class InteractionSystem : MonoBehaviour
     {
         if (HoldingItem != null)
         {
-            if (HoldingItem.gameObject.GetComponent<Collider>() is Collider col)
+            Collider itemCollider = HoldingItem.gameObject.GetComponent<Collider>();
+            if (itemCollider != null && playerCollider != null)
             {
-                col.enabled = true;
-            } 
+                Physics.IgnoreCollision(itemCollider, playerCollider, false);
+            }
+
             if (HoldingItem.gameObject.GetComponent<Rigidbody>() is Rigidbody rb)
             {
                 rb.isKinematic = false;
@@ -122,7 +130,7 @@ public class InteractionSystem : MonoBehaviour
             }
             HoldingItem.OnDrop();
 
-            HoldingItem = null; 
+            HoldingItem = null;
         }
     }
 
@@ -149,7 +157,7 @@ public class InteractionSystem : MonoBehaviour
         if (rb != null)
             rb.isKinematic = true;
 
-        float smoothTime = Mathf.Max(0.0001f, itemFollowPos);
+        float smoothTime = Mathf.Max(0.0001f, itemFollowSpeed);
 
         item.transform.position = Vector3.SmoothDamp(
             item.transform.position,
