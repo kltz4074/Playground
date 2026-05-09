@@ -7,8 +7,8 @@ using UnityEngine.InputSystem;
 public class PlayerController : MonoBehaviour
 {
     [Header("Movement")]
-    [SerializeField] private float moveSpeed = 5f;
-    [SerializeField] private float sprintSpeed = 8f;
+    [SerializeField] public float moveSpeed = 5f;
+    [SerializeField] public float sprintSpeed = 8f;
     [SerializeField] private float jumpForce = 5f;
 
     [SerializeField] private float groundCheckDistance = 0.1f;
@@ -29,9 +29,11 @@ public class PlayerController : MonoBehaviour
     private Vector2 moveInput;
     private Vector2 lookInput;
 
-    private float currentSpeed;
-    private bool isSprinting;
-    private bool isGrounded;
+    [HideInInspector] public float currentSpeed;
+    [HideInInspector] public bool isWalking;
+    [HideInInspector] public bool isJumping;
+    [HideInInspector] public bool isSprinting;
+    [HideInInspector] public bool isGrounded;
     float xClamp = 85f;
     float xRotation;
 
@@ -64,28 +66,40 @@ public class PlayerController : MonoBehaviour
 
     private void FixedUpdate()
     {
-        if (playerInput != null && playerInput.actions != null)
-        {
-            if (sprintAction != null)
-            {
-                isSprinting = sprintAction.IsPressed();
-            }
-        }
-
         GroundCheck();
+        UpdateStateFlags();
 
         currentSpeed = isSprinting ? sprintSpeed : moveSpeed;
         Movement();
     }
 
-    public void OnMove(InputValue value) => moveInput = value.Get<Vector2>();
+    public void OnMove(InputValue value)
+    {
+        moveInput = value.Get<Vector2>();
+    }
     public void OnCamera(InputValue value) => lookInput = value.Get<Vector2>();
     public void OnJump(InputValue value)
     {
         if (value.isPressed && isGrounded)
         {
             rb.AddForce(Vector3.up * jumpForce, ForceMode.Impulse);
-            isGrounded = false;
+            isJumping = true;
+        }
+    }
+
+    private void UpdateStateFlags()
+    {
+
+        isWalking = moveInput.magnitude > 0.1f && isGrounded;
+
+        if (playerInput != null && playerInput.actions != null && sprintAction != null)
+        {
+            isSprinting = sprintAction.IsPressed() && moveInput.magnitude > 0.1f && isGrounded;
+        }
+
+        if (isGrounded && !rb.linearVelocity.y.Equals(0) || isGrounded)
+        {
+            isJumping = false;
         }
     }
 

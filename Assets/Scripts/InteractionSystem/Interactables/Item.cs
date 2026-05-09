@@ -7,4 +7,10 @@ public class Item : ScriptableObject
     public GameObject Prefab;
     [TextArea]
     public string description;
+
+    public bool isCustomPlaceable;
+    public Vector2 InHandPos;
+    public Vector2 InHandRot;
+    public float InHandScale;
+    public float minHoldDistance = 0.5f;
 }

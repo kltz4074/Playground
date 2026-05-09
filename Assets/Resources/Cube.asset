@@ -15,3 +15,8 @@ MonoBehaviour:
   itemName: Cube
   Prefab: {fileID: 3292437706731074504, guid: 71e8bfbfa4c559342abe2a1f986df630, type: 3}
   description: Just cube
+  isCustomPlaceable: 1
+  InHandPos: {x: 1.41, y: -0.92}
+  InHandRot: {x: -5.93, y: -7.52}
+  InHandScale: 0.5
+  minHoldDistance: 2
