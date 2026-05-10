@@ -21,7 +21,6 @@ public class PlayerStateMachine : MonoBehaviour
     [SerializeField] private float currentSpeed;
 
     private PlayerState previousState;
-    private float animatorVelocity = 0f;
 
     private void Start()
     {
@@ -44,22 +43,18 @@ public class PlayerStateMachine : MonoBehaviour
     {
         currentSpeed = playerController.currentSpeed;
 
-        // Приоритет 1: Прыжок имеет наивысший приоритет
         if (playerController.isJumping)
         {
             currentState = PlayerState.Jumping;
         }
-        // Приоритет 2: Спринт/Бег
         else if (playerController.isSprinting)
         {
             currentState = PlayerState.Running;
         }
-        // Приоритет 3: Ходьба
         else if (playerController.isWalking)
         {
             currentState = PlayerState.Walking;
         }
-        // Приоритет 4: Стояние на месте (по умолчанию)
         else
         {
             currentState = PlayerState.Idle;
@@ -121,7 +116,6 @@ public class PlayerStateMachine : MonoBehaviour
     {
         if (animator == null) return;
 
-        // Определяем целевую скорость на основе состояния
         float targetVelocity = 0f;
 
         if (currentState == PlayerState.Running)
@@ -136,12 +130,11 @@ public class PlayerStateMachine : MonoBehaviour
         {
             targetVelocity = playerController.moveSpeed / playerController.sprintSpeed;
         }
-        else // Idle
+        else 
         {
             targetVelocity = 0f;
         }
 
-        // Очищаем микроскопические значения
         if (Mathf.Abs(targetVelocity) < 0.01f)
         {
             targetVelocity = 0f;
