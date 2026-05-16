@@ -5,35 +5,59 @@ public enum PlayerState
     Idle,
     Walking,
     Running,
-    Jumping
+    Jumping,
+    Falling
 }
 
+[RequireComponent(typeof(PlayerController))]
 public class PlayerStateMachine : MonoBehaviour
 {
     [Header("References")]
-    public PlayerController playerController;
-    private Animator animator;
+    [SerializeField] private PlayerController playerController;
+    [SerializeField] private Animator animator;
 
     [Header("Current State")]
-    public PlayerState currentState;
+    [SerializeField] private PlayerState currentState;
+
+    [Header("Settings")]
+    [SerializeField] private float animatorSmoothTime = 8f;
+    [SerializeField] private bool enableDebugLogs;
 
     [Header("Debug")]
-    [SerializeField] private float currentSpeed;
+    [SerializeField] private float currentVelocityValue;
 
     private PlayerState previousState;
+    private int velocityHash;
+    private int isGroundedHash;
+    private int isJumpingHash;
+    private int isFallingHash;
 
-    private void Start()
+    public PlayerState CurrentState => currentState;
+
+    private void Awake()
     {
-        animator = GetComponent<Animator>();
-
         if (playerController == null)
             playerController = GetComponent<PlayerController>();
 
+        if (animator == null)
+            animator = GetComponent<Animator>();
+
+        velocityHash = Animator.StringToHash("Velocity");
+        isGroundedHash = Animator.StringToHash("IsGrounded");
+        isJumpingHash = Animator.StringToHash("IsJumping");
+        isFallingHash = Animator.StringToHash("IsFalling");
+    }
+
+    private void Start()
+    {
+        currentState = PlayerState.Idle;
         previousState = currentState;
     }
 
     private void Update()
     {
+        if (playerController == null) return;
+
         UpdateState();
         HandleStateChange();
         UpdateAnimator();
@@ -41,39 +65,49 @@ public class PlayerStateMachine : MonoBehaviour
 
     private void UpdateState()
     {
-        currentSpeed = playerController.currentSpeed;
+        float verticalVelocity = playerController.GetComponent<Rigidbody>().linearVelocity.y;
+
+        if (!playerController.isGrounded && verticalVelocity < -0.1f)
+        {
+            currentState = PlayerState.Falling;
+            return;
+        }
 
         if (playerController.isJumping)
         {
             currentState = PlayerState.Jumping;
+            return;
         }
-        else if (playerController.isSprinting)
+
+        if (playerController.isSprinting)
         {
             currentState = PlayerState.Running;
+            return;
         }
-        else if (playerController.isWalking)
+
+        if (playerController.isWalking)
         {
             currentState = PlayerState.Walking;
+            return;
         }
-        else
-        {
-            currentState = PlayerState.Idle;
-        }
+
+        currentState = PlayerState.Idle;
     }
 
     private void HandleStateChange()
     {
-        if (previousState != currentState)
-        {
-            ExitState(previousState);
-            EnterState(currentState);
+        if (previousState == currentState) return;
 
-            previousState = currentState;
-        }
+        ExitState(previousState);
+        EnterState(currentState);
+
+        previousState = currentState;
     }
 
     private void EnterState(PlayerState newState)
     {
+        if (!enableDebugLogs) return;
+
         switch (newState)
         {
             case PlayerState.Idle:
@@ -91,55 +125,71 @@ public class PlayerStateMachine : MonoBehaviour
             case PlayerState.Jumping:
                 Debug.Log("Entered Jumping");
                 break;
+
+            case PlayerState.Falling:
+                Debug.Log("Entered Falling");
+                break;
         }
     }
 
     private void ExitState(PlayerState oldState)
     {
-        switch (oldState)
-        {
-            case PlayerState.Idle:
-                break;
-
-            case PlayerState.Walking:
-                break;
-
-            case PlayerState.Running:
-                break;
-
-            case PlayerState.Jumping:
-                break;
-        }
     }
 
     private void UpdateAnimator()
     {
         if (animator == null) return;
 
-        float targetVelocity = 0f;
+        float targetVelocity = GetTargetVelocity();
 
-        if (currentState == PlayerState.Running)
+        if (targetVelocity == 0f)
         {
-            targetVelocity = 1f;
+            currentVelocityValue = 0f;
         }
-        else if (currentState == PlayerState.Walking)
+        else
         {
-            targetVelocity = playerController.moveSpeed / playerController.sprintSpeed;
-        }
-        else if (currentState == PlayerState.Jumping)
-        {
-            targetVelocity = playerController.moveSpeed / playerController.sprintSpeed;
-        }
-        else 
-        {
-            targetVelocity = 0f;
+            currentVelocityValue = Mathf.Lerp(
+                currentVelocityValue,
+                targetVelocity,
+                animatorSmoothTime * Time.deltaTime
+            );
         }
 
-        if (Mathf.Abs(targetVelocity) < 0.01f)
-        {
-            targetVelocity = 0f;
-        }
+        if (Mathf.Abs(currentVelocityValue) < 0.01f)
+            currentVelocityValue = 0f;
 
-        animator.SetFloat("Velocity", targetVelocity);
+        animator.SetFloat(velocityHash, currentVelocityValue);
+        animator.SetBool(isGroundedHash, playerController.isGrounded);
+        animator.SetBool(isJumpingHash, currentState == PlayerState.Jumping);
+        animator.SetBool(isFallingHash, currentState == PlayerState.Falling);
     }
+
+    private float GetTargetVelocity()
+    {
+        switch (currentState)
+        {
+            case PlayerState.Running:
+                return 1f;
+
+            case PlayerState.Walking:
+                return Mathf.Clamp01(
+                    playerController.MoveSpeed / playerController.SprintSpeed
+                );
+
+            case PlayerState.Jumping:
+                return Mathf.Clamp01(
+                    playerController.moveInput.magnitude
+                );
+
+            case PlayerState.Falling:
+                return Mathf.Clamp01(
+                    playerController.moveInput.magnitude
+                );
+
+            default:
+                return 0f;
+        }
+    }
+
+
 }
