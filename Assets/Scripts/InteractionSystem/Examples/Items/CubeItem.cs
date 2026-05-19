@@ -1,6 +1,6 @@
 using UnityEngine;
 
-public class CubeItem : IItem
+public class CubeItem : ItemBase
 {
     public override void OnItemUpdate()
     {

@@ -1,7 +1,7 @@
 using System;
 using UnityEngine;
 
-public class IInteractable : MonoBehaviour
+public class Interactable : MonoBehaviour
 {
     public virtual void OnInteract()
     {

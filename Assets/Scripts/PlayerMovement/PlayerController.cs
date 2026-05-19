@@ -1,31 +1,60 @@
 ﻿using UnityEngine;
 using UnityEngine.InputSystem;
-using System.Collections.Generic;
 
 [RequireComponent(typeof(PlayerInput))]
 [RequireComponent(typeof(Rigidbody))]
 [RequireComponent(typeof(CapsuleCollider))]
+[RequireComponent(typeof(Animator))]
 public class PlayerController : MonoBehaviour
 {
     [Header("Movement")]
     [SerializeField] private float moveSpeed = 5f;
     [SerializeField] private float sprintSpeed = 8f;
+    [SerializeField] private float crouchSpeed = 2.5f;
+
+    [Header("Acceleration")]
+    [SerializeField] private float acceleration = 35f;
+    [SerializeField] private float deceleration = 25f;
+    [SerializeField] private float airControlMultiplier = 0.4f;
+
+    [Header("Jump")]
     [SerializeField] private float jumpForce = 5f;
     [SerializeField] private float jumpCooldown = 0.2f;
-    [SerializeField] private float groundCheckDistance = 0.15f;
+    [SerializeField] private float coyoteTime = 0.15f;
+
+    [Header("Ground Check")]
+    [SerializeField] private float groundCheckDistance = 0.2f;
     [SerializeField] private LayerMask groundLayer = ~0;
 
     [Header("Crouch")]
     [SerializeField] private float crouchHeight = 1f;
-    [SerializeField] private float standingHeight = 2f;
-    [SerializeField] private float crouchSpeed = 2.5f;
+    [SerializeField] private float crouchSmoothSpeed = 12f;
 
     [Header("Camera")]
+    [SerializeField] private Camera playerCamera;
+
     [SerializeField] private float mouseSensitivity = 0.1f;
     [SerializeField] private float gamepadSensitivity = 120f;
-    [SerializeField] private float cameraOffsetY = 0.1f;
-    [SerializeField] private Camera playerCamera;
+
     [SerializeField] private float xClamp = 85f;
+
+    [SerializeField] private bool smoothCamera = true;
+    [SerializeField] private float horizontalSmoothSpeed = 15f;
+    [SerializeField] private float verticalSmoothSpeed = 15f;
+
+    [Header("Lean")]
+    [SerializeField] private float maxLeanAngle = 8f;
+    [SerializeField] private float leanSmoothSpeed = 8f;
+
+    [Header("Camera Tilt")]
+    [SerializeField] private float movementTiltAmount = 3f;
+    [SerializeField] private float movementTiltSmooth = 6f;
+
+    [Header("FOV")]
+    [SerializeField] private float normalFOV = 60f;
+    [SerializeField] private float sprintFOV = 70f;
+    [SerializeField] private float crouchFOV = 50f;
+    [SerializeField] private float fovSmooth = 5f;
 
     [Header("Input")]
     [SerializeField] private InputActionReference moveAction;
@@ -34,102 +63,58 @@ public class PlayerController : MonoBehaviour
     [SerializeField] private InputActionReference sprintAction;
     [SerializeField] private InputActionReference crouchAction;
 
-    [Header("Footstep Sounds")]
-    [SerializeField] private AudioSource footstepAudioSource;
-    [SerializeField] private float footstepCooldown = 0.5f;
-    [SerializeField] private List<SurfaceFootstepData> surfaceFootsteps = new List<SurfaceFootstepData>();
-
-    [HideInInspector] public float currentSpeed;
-    [HideInInspector] public bool isWalking;
-    [HideInInspector] public bool isJumping;
-    [HideInInspector] public bool isSprinting;
-    [HideInInspector] public bool isGrounded;
-    [HideInInspector] public Vector2 moveInput;
-
-    public float MoveSpeed => moveSpeed;
-    public float SprintSpeed => sprintSpeed;
-
     private Rigidbody rb;
-    private PlayerInput playerInput;
     private CapsuleCollider capsule;
-    private Vector2 lookInput;
-    private float xRotation;
-    private float lastJumpTime;
-    private float preservedAirSpeed;
-    private float lastFootstepTime;
-    private string currentGroundTag = "Untagged";
-    private RaycastHit lastGroundHit;
-    private bool isCrouching;
-    private Vector3 standingCenter;
-    private float originalCameraOffset;
+    private Animator animator;
+    private PlayerInput playerInput;
 
-    [System.Serializable]
-    public class SurfaceFootstepData
-    {
-        public string surfaceTag = "Default";
-        public AudioClip[] footstepClips;
-        public float volumeMultiplier = 1f;
-    }
+    private Vector2 moveInput;
+    private Vector2 lookInput;
+
+    private bool isGrounded;
+    private bool isSprinting;
+    private bool isCrouching;
+
+    private float currentSpeed;
+
+    private float xRotation;
+    private float yRotation;
+
+    private float lastJumpTime;
+    private float lastGroundedTime;
+
+    private float standingHeight;
+    private Vector3 standingCenter;
+
+    private float targetCapsuleHeight;
+    private Vector3 targetCapsuleCenter;
+
+    private float currentLean;
+    private float currentTilt;
+
+    private static readonly int SpeedHash =
+        Animator.StringToHash("Speed");
+
+    private static readonly int GroundedHash =
+        Animator.StringToHash("isGrounded");
+
+    private static readonly int CrouchingHash =
+        Animator.StringToHash("isCrouching");
+
+    private static readonly int JumpHash =
+        Animator.StringToHash("Jump");
 
     private void Awake()
     {
         rb = GetComponent<Rigidbody>();
-        playerInput = GetComponent<PlayerInput>();
         capsule = GetComponent<CapsuleCollider>();
-
-        if (playerCamera == null)
-            playerCamera = Camera.main;
+        animator = GetComponent<Animator>();
+        playerInput = GetComponent<PlayerInput>();
 
         rb.freezeRotation = true;
 
-        if (footstepAudioSource == null)
-            footstepAudioSource = GetComponent<AudioSource>();
-    }
-
-    private void OnEnable()
-    {
-        if (moveAction != null)
-        {
-            moveAction.action.Enable();
-            moveAction.action.performed += OnMove;
-            moveAction.action.canceled += OnMove;
-        }
-
-        if (lookAction != null)
-        {
-            lookAction.action.Enable();
-            lookAction.action.performed += OnLook;
-            lookAction.action.canceled += OnLook;
-        }
-
-        if (jumpAction != null)
-        {
-            jumpAction.action.Enable();
-            jumpAction.action.performed += OnJump;
-        }
-
-        if (sprintAction != null)
-            sprintAction.action.Enable();
-        if (crouchAction != null)
-            crouchAction.action.Enable();
-    }
-
-    private void OnDisable()
-    {
-        if (moveAction != null)
-        {
-            moveAction.action.performed -= OnMove;
-            moveAction.action.canceled -= OnMove;
-        }
-
-        if (lookAction != null)
-        {
-            lookAction.action.performed -= OnLook;
-            lookAction.action.canceled -= OnLook;
-        }
-
-        if (jumpAction != null)
-            jumpAction.action.performed -= OnJump;
+        if (playerCamera == null)
+            playerCamera = Camera.main;
     }
 
     private void Start()
@@ -137,26 +122,63 @@ public class PlayerController : MonoBehaviour
         Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible = false;
 
-        currentSpeed = moveSpeed;
-
-
-        standingCenter = capsule.center;
         standingHeight = capsule.height;
-        originalCameraOffset = cameraOffsetY;
+        standingCenter = capsule.center;
+
+        targetCapsuleHeight = standingHeight;
+        targetCapsuleCenter = standingCenter;
+
+        currentSpeed = moveSpeed;
     }
+
+    private void OnEnable()
+    {
+        moveAction.action.Enable();
+        lookAction.action.Enable();
+        jumpAction.action.Enable();
+        sprintAction.action.Enable();
+        crouchAction.action.Enable();
+
+        moveAction.action.performed += OnMove;
+        moveAction.action.canceled += OnMove;
+
+        lookAction.action.performed += OnLook;
+        lookAction.action.canceled += OnLook;
+
+        jumpAction.action.performed += OnJump;
+    }
+
+    private void OnDisable()
+    {
+        moveAction.action.performed -= OnMove;
+        moveAction.action.canceled -= OnMove;
+
+        lookAction.action.performed -= OnLook;
+        lookAction.action.canceled -= OnLook;
+
+        jumpAction.action.performed -= OnJump;
+    }
+
     private void Update()
     {
         GroundCheck();
-        HandleCrouch();      
-        UpdateStateFlags();
-        CameraLogic();       
-        UpdateAudioSourcePosition();
-        UpdateFootsteps();
+
+        HandleCrouch();
+
+        UpdateMovementState();
+
+        UpdateAnimator();
+
+        CameraLook();
+
+        UpdateCameraTilt();
+
+        UpdateFOV();
     }
 
     private void FixedUpdate()
     {
-        Movement();
+        HandleMovement();
     }
 
     private void OnMove(InputAction.CallbackContext context)
@@ -171,49 +193,35 @@ public class PlayerController : MonoBehaviour
 
     private void OnJump(InputAction.CallbackContext context)
     {
-        if (!isGrounded || isJumping) return;
-        if (Time.time < lastJumpTime + jumpCooldown) return;
-
-        lastJumpTime = Time.time;
-
-        isGrounded = false;
-        isJumping = true;
-
-        preservedAirSpeed = currentSpeed;
-
-        Vector3 velocity = rb.linearVelocity;
-        velocity.y = 0f;
-        rb.linearVelocity = velocity;
-
-        rb.AddForce(Vector3.up * jumpForce, ForceMode.Impulse);
+        Jump();
     }
 
-    private void UpdateStateFlags()
+    private void UpdateMovementState()
     {
-        isWalking = moveInput.sqrMagnitude > 0.01f && isGrounded;
+        bool moving = moveInput.sqrMagnitude > 0.01f;
 
-        bool sprintPressed = sprintAction != null && sprintAction.action.IsPressed();
+        bool sprintPressed =
+            sprintAction != null &&
+            sprintAction.action.IsPressed();
 
-        if (isGrounded)
-        {
-            if (isCrouching)
-            {
-                isSprinting = false;
-                currentSpeed = crouchSpeed;
-            }
-            else
-            {
-                isSprinting = sprintPressed && moveInput.sqrMagnitude > 0.01f;
-                currentSpeed = isSprinting ? sprintSpeed : moveSpeed;
-            }
-        }
+        isSprinting =
+            sprintPressed &&
+            moving &&
+            !isCrouching &&
+            isGrounded;
 
-        if (isGrounded && rb.linearVelocity.y <= 0.05f)
-            isJumping = false;
+        if (isCrouching)
+            currentSpeed = crouchSpeed;
+        else if (isSprinting)
+            currentSpeed = sprintSpeed;
+        else
+            currentSpeed = moveSpeed;
     }
-    private void Movement()
+
+    private void HandleMovement()
     {
-        if (playerCamera == null) return;
+        if (playerCamera == null)
+            return;
 
         Vector3 forward = playerCamera.transform.forward;
         Vector3 right = playerCamera.transform.right;
@@ -224,189 +232,177 @@ public class PlayerController : MonoBehaviour
         forward.Normalize();
         right.Normalize();
 
-        Vector3 moveDirection = (right * moveInput.x + forward * moveInput.y).normalized;
+        Vector3 moveDirection =
+            (forward * moveInput.y +
+             right * moveInput.x).normalized;
 
-        float speedToUse = isGrounded ? currentSpeed : preservedAirSpeed;
+        float control =
+            isGrounded
+            ? 1f
+            : airControlMultiplier;
+
+        Vector3 targetVelocity =
+            moveDirection *
+            currentSpeed *
+            control;
 
         Vector3 velocity = rb.linearVelocity;
 
-        velocity.x = moveDirection.x * speedToUse;
-        velocity.z = moveDirection.z * speedToUse;
+        Vector3 horizontalVelocity =
+            new Vector3(
+                velocity.x,
+                0f,
+                velocity.z
+            );
 
-        rb.linearVelocity = velocity;
-    }
-    private void CameraLogic()
-    {
-        if (playerCamera == null) return;
+        Vector3 targetHorizontal =
+            new Vector3(
+                targetVelocity.x,
+                0f,
+                targetVelocity.z
+            );
 
-        float targetCameraY = capsule.center.y + (capsule.height * 0.5f) - cameraOffsetY;
+        float accel =
+            moveDirection.sqrMagnitude > 0.01f
+            ? acceleration
+            : deceleration;
 
-        playerCamera.transform.localPosition = Vector3.Lerp(
-            playerCamera.transform.localPosition,
-            new Vector3(capsule.center.x, targetCameraY, capsule.center.z),
-            Time.deltaTime * 10f
+        horizontalVelocity = Vector3.MoveTowards(
+            horizontalVelocity,
+            targetHorizontal,
+            accel * Time.fixedDeltaTime
         );
 
-        bool mouseScheme = playerInput.currentControlScheme != null &&
-                           playerInput.currentControlScheme.Contains("Mouse");
-
-        float x;
-        float y;
-
-        if (mouseScheme)
-        {
-            x = lookInput.x * mouseSensitivity;
-            y = lookInput.y * mouseSensitivity;
-        }
-        else
-        {
-            x = lookInput.x * gamepadSensitivity * Time.deltaTime;
-            y = lookInput.y * gamepadSensitivity * Time.deltaTime;
-        }
-
-        transform.Rotate(Vector3.up * x);
-
-        xRotation -= y;
-        xRotation = Mathf.Clamp(xRotation, -xClamp, xClamp);
-
-        playerCamera.transform.localRotation = Quaternion.Euler(xRotation, 0f, 0f);
+        rb.linearVelocity = new Vector3(
+            horizontalVelocity.x,
+            velocity.y,
+            horizontalVelocity.z
+        );
     }
+
+    private void Jump()
+    {
+        bool canJump =
+            Time.time <
+            lastGroundedTime + coyoteTime;
+
+        if (!canJump)
+            return;
+
+        if (Time.time <
+            lastJumpTime + jumpCooldown)
+            return;
+
+        lastJumpTime = Time.time;
+
+        Vector3 velocity = rb.linearVelocity;
+        velocity.y = 0f;
+
+        rb.linearVelocity = velocity;
+
+        rb.AddForce(
+            Vector3.up * jumpForce,
+            ForceMode.Impulse
+        );
+
+        animator.ResetTrigger(JumpHash);
+        animator.SetTrigger(JumpHash);
+
+        isGrounded = false;
+    }
+
     private void GroundCheck()
     {
-        Vector3 center = transform.TransformPoint(capsule.center);
+        Vector3 origin =
+            transform.position +
+            Vector3.up * 0.1f;
 
-        float radius = capsule.radius * Mathf.Max(transform.lossyScale.x, transform.lossyScale.z);
-        float height = Mathf.Max(capsule.height * transform.lossyScale.y, radius * 2f);
+        float rayLength =
+            (capsule.height / 2f) +
+            groundCheckDistance;
 
-        Vector3 point1 = center + Vector3.up * (height / 2f - radius);
-        Vector3 point2 = center - Vector3.up * (height / 2f - radius);
-
-        isGrounded = Physics.CapsuleCast(
-            point1,
-            point2,
-            radius * 0.95f,
+        isGrounded = Physics.SphereCast(
+            origin,
+            capsule.radius * 0.9f,
             Vector3.down,
-            out lastGroundHit,
-            groundCheckDistance,
+            out _,
+            rayLength,
             groundLayer,
             QueryTriggerInteraction.Ignore
         );
 
-        if (isGrounded && lastGroundHit.collider != null)
-        {
-            currentGroundTag = lastGroundHit.collider.tag;
-        }
-    }
-
-    private void UpdateFootsteps()
-    {
-        if (!isWalking || !isGrounded) return;
-        if (Time.time < lastFootstepTime + footstepCooldown) return;
-
-        PlayFootstep();
-        lastFootstepTime = Time.time;
-    }
-
-    private void PlayFootstep()
-    {
-        if (footstepAudioSource == null) return;
-
-        SurfaceFootstepData surfaceData = GetSurfaceFootstepData(currentGroundTag);
-
-        if (surfaceData == null || surfaceData.footstepClips == null || surfaceData.footstepClips.Length == 0)
-            return;
-
-        AudioClip clip = surfaceData.footstepClips[Random.Range(0, surfaceData.footstepClips.Length)];
-
-        if (clip != null)
-        {
-            footstepAudioSource.PlayOneShot(clip, surfaceData.volumeMultiplier);
-        }
-    }
-
-    private SurfaceFootstepData GetSurfaceFootstepData(string tag)
-    {
-        foreach (SurfaceFootstepData data in surfaceFootsteps)
-        {
-            if (data.surfaceTag == tag)
-                return data;
-        }
-
-        return null;
+        if (isGrounded)
+            lastGroundedTime = Time.time;
     }
 
     private void HandleCrouch()
     {
-        if (crouchAction == null) return;
-
-        bool crouchPressed = crouchAction.action.IsPressed();
+        bool crouchPressed =
+            crouchAction != null &&
+            crouchAction.action.IsPressed();
 
         if (crouchPressed)
         {
-            if (!isCrouching)
-            {
-                isCrouching = true;
-                float bottomY = capsule.bounds.min.y;
+            isCrouching = true;
 
-                capsule.height = crouchHeight;
+            targetCapsuleHeight = crouchHeight;
 
-                float newCenterY = (bottomY - transform.position.y) + (crouchHeight / 2f);
-
-                capsule.center = new Vector3(
-                    standingCenter.x,
-                    newCenterY,
-                    standingCenter.z
-                );
-
-                currentSpeed = crouchSpeed;
-            }
+            targetCapsuleCenter = new Vector3(
+                standingCenter.x,
+                crouchHeight / 2f,
+                standingCenter.z
+            );
         }
-        else
+        else if (CanStandUp())
         {
-            if (isCrouching)
-            {
-                if (CanStandUp())
-                {
-                    isCrouching = false;
+            isCrouching = false;
 
-                    float bottomY = capsule.bounds.min.y;
-
-                    capsule.height = standingHeight;
-
-                    float newCenterY = (bottomY - transform.position.y) + (standingHeight / 2f);
-
-                    capsule.center = new Vector3(
-                        standingCenter.x,
-                        newCenterY,
-                        standingCenter.z
-                    );
-                }
-            }
+            targetCapsuleHeight = standingHeight;
+            targetCapsuleCenter = standingCenter;
         }
+
+        capsule.height = Mathf.Lerp(
+            capsule.height,
+            targetCapsuleHeight,
+            Time.deltaTime * crouchSmoothSpeed
+        );
+
+        capsule.center = Vector3.Lerp(
+            capsule.center,
+            targetCapsuleCenter,
+            Time.deltaTime * crouchSmoothSpeed
+        );
     }
+
     private bool CanStandUp()
     {
-        float bottomY = capsule.bounds.min.y;
-
         float radius = capsule.radius * 0.95f;
-        float halfHeight = standingHeight / 2f;
 
-        Vector3 center = new Vector3(
-            transform.position.x,
-            bottomY + halfHeight,
-            transform.position.z
-        );
+        float halfHeight =
+            standingHeight / 2f;
 
-        Vector3 point1 = center + Vector3.up * (halfHeight - radius);
-        Vector3 point2 = center - Vector3.up * (halfHeight - radius);
+        Vector3 center =
+            transform.position +
+            Vector3.up * halfHeight;
 
-        Collider[] hits = Physics.OverlapCapsule(
-            point1,
-            point2,
-            radius,
-            ~0,
-            QueryTriggerInteraction.Ignore
-        );
+        Vector3 point1 =
+            center +
+            Vector3.up *
+            (halfHeight - radius);
+
+        Vector3 point2 =
+            center -
+            Vector3.up *
+            (halfHeight - radius);
+
+        Collider[] hits =
+            Physics.OverlapCapsule(
+                point1,
+                point2,
+                radius,
+                ~0,
+                QueryTriggerInteraction.Ignore
+            );
 
         foreach (Collider hit in hits)
         {
@@ -418,18 +414,155 @@ public class PlayerController : MonoBehaviour
 
         return true;
     }
-    private void UpdateAudioSourcePosition()
+
+    private void UpdateAnimator()
     {
-        if (footstepAudioSource == null) return;
+        bool moving =
+            moveInput.sqrMagnitude > 0.01f;
 
-        Bounds bounds = capsule.bounds;
+        float speed = 0f;
 
-        Vector3 bottomPosition = new Vector3(
-            bounds.center.x,
-            bounds.min.y,
-            bounds.center.z
+        if (moving)
+        {
+            if (isCrouching)
+                speed = 0.3f;
+            else if (isSprinting)
+                speed = 1f;
+            else
+                speed = 0.5f;
+        }
+
+        animator.SetFloat(
+            SpeedHash,
+            speed,
+            0.1f,
+            Time.deltaTime
         );
 
-        footstepAudioSource.transform.position = bottomPosition;
+        animator.SetBool(
+            GroundedHash,
+            isGrounded
+        );
+
+        animator.SetBool(
+            CrouchingHash,
+            isCrouching
+        );
+    }
+
+    private void CameraLook()
+    {
+        bool mouseScheme =
+            playerInput.currentControlScheme != null &&
+            playerInput.currentControlScheme.Contains("Mouse");
+
+        float x;
+        float y;
+
+        if (mouseScheme)
+        {
+            x = lookInput.x * mouseSensitivity;
+            y = lookInput.y * mouseSensitivity;
+        }
+        else
+        {
+            x = lookInput.x *
+                gamepadSensitivity *
+                Time.deltaTime;
+
+            y = lookInput.y *
+                gamepadSensitivity *
+                Time.deltaTime;
+        }
+
+        yRotation += x;
+
+        xRotation -= y;
+
+        xRotation = Mathf.Clamp(
+            xRotation,
+            -xClamp,
+            xClamp
+        );
+
+        Quaternion bodyRotation =
+            Quaternion.Euler(
+                0f,
+                yRotation,
+                0f
+            );
+
+        transform.rotation = smoothCamera
+            ? Quaternion.Lerp(
+                transform.rotation,
+                bodyRotation,
+                Time.deltaTime *
+                horizontalSmoothSpeed
+            )
+            : bodyRotation;
+
+        float targetLean =
+            -moveInput.x * maxLeanAngle;
+
+        currentLean = Mathf.Lerp(
+            currentLean,
+            targetLean,
+            Time.deltaTime * leanSmoothSpeed
+        );
+
+        Quaternion cameraRotation =
+            Quaternion.Euler(
+                xRotation,
+                0f,
+                currentLean + currentTilt
+            );
+
+        playerCamera.transform.localRotation =
+            smoothCamera
+            ? Quaternion.Lerp(
+                playerCamera.transform.localRotation,
+                cameraRotation,
+                Time.deltaTime *
+                verticalSmoothSpeed
+            )
+            : cameraRotation;
+
+        playerCamera.transform.localPosition = Vector3.Lerp(
+                playerCamera.transform.localPosition,
+                capsule.center + Vector3.up * (capsule.height * 0.5f - 0.1f),
+                Time.deltaTime * crouchSmoothSpeed
+            );
+    }
+
+    private void UpdateCameraTilt()
+    {
+        float targetTilt =
+            -rb.linearVelocity.x *
+            movementTiltAmount *
+            0.1f;
+
+        currentTilt = Mathf.Lerp(
+            currentTilt,
+            targetTilt,
+            Time.deltaTime *
+            movementTiltSmooth
+        );
+    }
+
+    private void UpdateFOV()
+    {
+        float targetFOV =
+            isSprinting
+            ? sprintFOV
+            : (isCrouching
+                ? crouchFOV
+                : normalFOV);
+
+        playerCamera.fieldOfView =
+            Mathf.Lerp(
+                playerCamera.fieldOfView,
+                targetFOV,
+                Time.deltaTime * fovSmooth
+            );
     }
 }
