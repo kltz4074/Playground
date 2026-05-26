@@ -1,7 +1,4 @@
-using UnityEditor.TextCore.Text;
-using UnityEngine;
-using UnityEngine.UI;
-using UnityEngine.Windows.WebCam;
+ using UnityEngine;
 
 
 public class CameraRecording : MonoBehaviour

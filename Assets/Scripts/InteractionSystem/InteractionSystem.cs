@@ -1,5 +1,6 @@
 ﻿using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.UI;
 
 public class InteractionSystem : MonoBehaviour
 {
@@ -7,14 +8,13 @@ public class InteractionSystem : MonoBehaviour
     [SerializeField] private Camera playerCamera;
     [SerializeField] private Transform objectParent;
 
+
+
     [Header("Interaction")]
     [SerializeField] private float interactionRange = 3f;
-
+    [SerializeField] private LayerMask interactableLayerMask;
     [Header("Holding")]
     [SerializeField] private Vector3 defaultHoldOffset = new Vector3(0.5f, -0.5f, 2f);
-
-    [Header("Throw")]
-    [SerializeField] private float throwForce = 2f;
 
     [Header("Input")]
     [SerializeField] private InputActionReference interactActionReference;
@@ -27,6 +27,7 @@ public class InteractionSystem : MonoBehaviour
 
     private ItemBase holdingItem;
     private Collider playerCollider;
+
 
     private void Awake()
     {
@@ -66,17 +67,30 @@ public class InteractionSystem : MonoBehaviour
     {
         if (holdingItem != null)
         {
-            holdingItem.transform.localPosition = GetHoldPosition();
-            holdingItem.transform.localRotation = GetHoldRotation();
+            objectParent.transform.localPosition = GetHoldPosition();
+            objectParent.transform.localRotation = GetHoldRotation();
+            
+            holdingItem.transform.position = objectParent.position;
+            holdingItem.transform.rotation = Quaternion.Lerp(
+                holdingItem.transform.rotation,
+                objectParent.rotation,
+                Time.deltaTime * holdingItem.ScItem.RotationSpeed
+            );
         }
     }
 
     private void HandleInteraction()
     {
-        Ray ray = playerCamera.ScreenPointToRay(Mouse.current.position.ReadValue());
+        Vector2 center = new Vector2(Screen.width / 2f, Screen.height / 2f);
+        Ray ray = new Ray(
+            playerCamera.transform.position,
+            playerCamera.transform.forward
+        );
 
         if (!Physics.Raycast(ray, out RaycastHit hit, interactionRange))
             return;
+
+        Debug.DrawRay(ray.origin, ray.direction * interactionRange, Color.red);
 
         Interactable interactable = hit.collider.GetComponent<Interactable>();
 
@@ -91,12 +105,11 @@ public class InteractionSystem : MonoBehaviour
             PickupItem(item);
         }
     }
-
     private void PickupItem(ItemBase item)
     {
         holdingItem = item;
         item.OnInteract();
-
+        holdingItem.Grabbed = true;
         Collider itemCollider = item.GetComponent<Collider>();
         if (itemCollider != null && playerCollider != null)
         {
@@ -109,17 +122,15 @@ public class InteractionSystem : MonoBehaviour
             rb.isKinematic = true;
             rb.useGravity = false;
         }
-
-        item.transform.SetParent(objectParent);
-        item.transform.localPosition = GetHoldPosition();
-        item.transform.localRotation = GetHoldRotation();
+        
+        item.gameObject.layer = LayerMask.NameToLayer("Default");
     }
 
     private Vector3 GetHoldPosition()
     {
         if (holdingItem != null && holdingItem.ScItem != null && holdingItem.ScItem.isCustomPlaceable)
         {
-            return new Vector3(holdingItem.ScItem.InHandPos.x, holdingItem.ScItem.InHandPos.y, defaultHoldOffset.z);
+            return new Vector3(holdingItem.ScItem.InHandPos.x, holdingItem.ScItem.InHandPos.y, holdingItem.ScItem.holdDistance);
         }
 
         return defaultHoldOffset;
@@ -141,6 +152,7 @@ public class InteractionSystem : MonoBehaviour
             return;
 
         holdingItem.OnDrop();
+        holdingItem.Grabbed = false;
 
         Collider itemCollider = holdingItem.GetComponent<Collider>();
         if (itemCollider != null && playerCollider != null)
@@ -149,13 +161,13 @@ public class InteractionSystem : MonoBehaviour
         }
 
         holdingItem.transform.SetParent(null);
-
+        holdingItem.gameObject.layer = LayerMask.NameToLayer("Default");
         Rigidbody rb = holdingItem.GetComponent<Rigidbody>();
         if (rb != null)
         {
             rb.isKinematic = false;
             rb.useGravity = true;
-            rb.linearVelocity = playerCamera.transform.forward * throwForce;
+            rb.linearVelocity = playerCamera.transform.forward * holdingItem.ScItem.throwForce;
         }
 
         holdingItem = null;

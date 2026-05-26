@@ -15,6 +15,9 @@ MonoBehaviour:
   itemName: FlashLight
   description: flashlight 0_0?
   isCustomPlaceable: 1
-  InHandPos: {x: 0, y: 0}
-  InHandRot: {x: 0, y: -88.7, z: 0}
-  minHoldDistance: 1
+  InHandPos: {x: 0.41, y: -0.29}
+  InHandRot: {x: 0, y: -93.2, z: 7}
+  holdDistance: 0.72
+  throwForce: 2
+  RotationSpeed: 20
+  PositionSpeed: 10

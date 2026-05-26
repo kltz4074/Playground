@@ -7,61 +7,93 @@ using UnityEngine.InputSystem;
 [RequireComponent(typeof(Animator))]
 public class PlayerController : MonoBehaviour
 {
+    [Header("Features")]
+    [SerializeField] private bool canWalk = true;
+    [SerializeField] private bool canSprint = true;
+    [SerializeField] private bool canCrouch = true;
+    [SerializeField] private bool canJump = true;
+
     [Header("Movement")]
-    [SerializeField] private float moveSpeed = 5f;
-    [SerializeField] private float sprintSpeed = 8f;
-    [SerializeField] private float crouchSpeed = 2.5f;
+    [SerializeField, ShowIf(nameof(canWalk))] private float moveSpeed = 5f;
+
+    [SerializeField, ShowIf(nameof(canSprint))] private float sprintSpeed = 8f;
+
+    [SerializeField, ShowIf(nameof(canCrouch))] private float crouchSpeed = 2.5f;
 
     [Header("Acceleration")]
     [SerializeField] private float acceleration = 35f;
+
     [SerializeField] private float deceleration = 25f;
+
     [SerializeField] private float airControlMultiplier = 0.4f;
 
     [Header("Jump")]
-    [SerializeField] private float jumpForce = 5f;
-    [SerializeField] private float jumpCooldown = 0.2f;
-    [SerializeField] private float coyoteTime = 0.15f;
+    [SerializeField, ShowIf(nameof(canJump))] private float jumpForce = 5f;
+
+    [SerializeField, ShowIf(nameof(canJump))] private float jumpCooldown = 0.2f;
+
+    [SerializeField, ShowIf(nameof(canJump))] private float coyoteTime = 0.15f;
 
     [Header("Ground Check")]
     [SerializeField] private float groundCheckDistance = 0.2f;
+
     [SerializeField] private LayerMask groundLayer = ~0;
 
     [Header("Crouch")]
-    [SerializeField] private float crouchHeight = 1f;
-    [SerializeField] private float crouchSmoothSpeed = 12f;
+    [SerializeField, ShowIf(nameof(canCrouch))] private float crouchHeight = 1f;
+
+    [SerializeField, ShowIf(nameof(canCrouch))] private float crouchSmoothSpeed = 12f;
 
     [Header("Camera")]
     [SerializeField] private Camera playerCamera;
 
     [SerializeField] private float mouseSensitivity = 0.1f;
+
     [SerializeField] private float gamepadSensitivity = 120f;
 
     [SerializeField] private float xClamp = 85f;
 
     [SerializeField] private bool smoothCamera = true;
-    [SerializeField] private float horizontalSmoothSpeed = 15f;
-    [SerializeField] private float verticalSmoothSpeed = 15f;
+
+    [SerializeField, ShowIf(nameof(smoothCamera))] private float horizontalSmoothSpeed = 15f;
+
+    [SerializeField, ShowIf(nameof(smoothCamera))] private float verticalSmoothSpeed = 15f;
 
     [Header("Lean")]
     [SerializeField] private float maxLeanAngle = 8f;
+
     [SerializeField] private float leanSmoothSpeed = 8f;
 
     [Header("Camera Tilt")]
     [SerializeField] private float movementTiltAmount = 3f;
+
     [SerializeField] private float movementTiltSmooth = 6f;
 
     [Header("FOV")]
     [SerializeField] private float normalFOV = 60f;
-    [SerializeField] private float sprintFOV = 70f;
-    [SerializeField] private float crouchFOV = 50f;
+
+    [SerializeField, ShowIf(nameof(canSprint))] private float sprintFOV = 70f;
+
+    [SerializeField, ShowIf(nameof(canCrouch))] private float crouchFOV = 50f;
+
     [SerializeField] private float fovSmooth = 5f;
+
+    [Header("Stamina FOV Effects")]
+    [SerializeField] private float staminaLowFOV = 55f;
 
     [Header("Input")]
     [SerializeField] private InputActionReference moveAction;
+
     [SerializeField] private InputActionReference lookAction;
-    [SerializeField] private InputActionReference jumpAction;
-    [SerializeField] private InputActionReference sprintAction;
-    [SerializeField] private InputActionReference crouchAction;
+
+    [SerializeField, ShowIf(nameof(canJump))] private InputActionReference jumpAction;
+
+    [SerializeField, ShowIf(nameof(canSprint))] private InputActionReference sprintAction;
+
+    [SerializeField, ShowIf(nameof(canCrouch))] private InputActionReference crouchAction;
+
+    [Header("Stamina")]
+    [SerializeField] private StaminaManager staminaManager;
 
     private Rigidbody rb;
     private CapsuleCollider capsule;
@@ -76,7 +108,6 @@ public class PlayerController : MonoBehaviour
     private bool isCrouching;
 
     private float currentSpeed;
-
     private float xRotation;
     private float yRotation;
 
@@ -85,24 +116,18 @@ public class PlayerController : MonoBehaviour
 
     private float standingHeight;
     private Vector3 standingCenter;
-
     private float targetCapsuleHeight;
     private Vector3 targetCapsuleCenter;
 
     private float currentLean;
     private float currentTilt;
 
-    private static readonly int SpeedHash =
-        Animator.StringToHash("Speed");
+    private bool staminaEmptyBlinkPlayed;
 
-    private static readonly int GroundedHash =
-        Animator.StringToHash("isGrounded");
-
-    private static readonly int CrouchingHash =
-        Animator.StringToHash("isCrouching");
-
-    private static readonly int JumpHash =
-        Animator.StringToHash("Jump");
+    private static readonly int SpeedHash = Animator.StringToHash("Speed");
+    private static readonly int GroundedHash = Animator.StringToHash("isGrounded");
+    private static readonly int CrouchingHash = Animator.StringToHash("isCrouching");
+    private static readonly int JumpHash = Animator.StringToHash("Jump");
 
     private void Awake()
     {
@@ -115,6 +140,9 @@ public class PlayerController : MonoBehaviour
 
         if (playerCamera == null)
             playerCamera = Camera.main;
+
+        if (staminaManager == null)
+            staminaManager = GetComponent<StaminaManager>();
     }
 
     private void Start()
@@ -135,9 +163,15 @@ public class PlayerController : MonoBehaviour
     {
         moveAction.action.Enable();
         lookAction.action.Enable();
-        jumpAction.action.Enable();
-        sprintAction.action.Enable();
-        crouchAction.action.Enable();
+
+        if (canJump)
+            jumpAction.action.Enable();
+
+        if (canSprint)
+            sprintAction.action.Enable();
+
+        if (canCrouch)
+            crouchAction.action.Enable();
 
         moveAction.action.performed += OnMove;
         moveAction.action.canceled += OnMove;
@@ -145,9 +179,9 @@ public class PlayerController : MonoBehaviour
         lookAction.action.performed += OnLook;
         lookAction.action.canceled += OnLook;
 
-        jumpAction.action.performed += OnJump;
+        if (canJump)
+            jumpAction.action.performed += OnJump;
     }
-
     private void OnDisable()
     {
         moveAction.action.performed -= OnMove;
@@ -156,24 +190,19 @@ public class PlayerController : MonoBehaviour
         lookAction.action.performed -= OnLook;
         lookAction.action.canceled -= OnLook;
 
-        jumpAction.action.performed -= OnJump;
+        if (canJump)
+            jumpAction.action.performed -= OnJump;
     }
-
     private void Update()
     {
         GroundCheck();
-
         HandleCrouch();
-
         UpdateMovementState();
-
         UpdateAnimator();
-
         CameraLook();
-
         UpdateCameraTilt();
-
         UpdateFOV();
+        RegenerateStamina();
     }
 
     private void FixedUpdate()
@@ -183,6 +212,12 @@ public class PlayerController : MonoBehaviour
 
     private void OnMove(InputAction.CallbackContext context)
     {
+        if (!canWalk)
+        {
+            moveInput = Vector2.zero;
+            return;
+        }
+
         moveInput = context.ReadValue<Vector2>();
     }
 
@@ -199,16 +234,9 @@ public class PlayerController : MonoBehaviour
     private void UpdateMovementState()
     {
         bool moving = moveInput.sqrMagnitude > 0.01f;
+        bool sprintPressed = sprintAction != null && sprintAction.action.IsPressed();
 
-        bool sprintPressed =
-            sprintAction != null &&
-            sprintAction.action.IsPressed();
-
-        isSprinting =
-            sprintPressed &&
-            moving &&
-            !isCrouching &&
-            isGrounded;
+        isSprinting = sprintPressed && moving && !isCrouching && isGrounded && staminaManager != null && staminaManager.CurrentStamina > staminaManager.minStamina;
 
         if (isCrouching)
             currentSpeed = crouchSpeed;
@@ -220,90 +248,54 @@ public class PlayerController : MonoBehaviour
 
     private void HandleMovement()
     {
-        if (playerCamera == null)
-            return;
+        if (playerCamera == null) return;
 
         Vector3 forward = playerCamera.transform.forward;
         Vector3 right = playerCamera.transform.right;
-
         forward.y = 0f;
         right.y = 0f;
-
         forward.Normalize();
         right.Normalize();
 
-        Vector3 moveDirection =
-            (forward * moveInput.y +
-             right * moveInput.x).normalized;
+        Vector3 moveDirection = (forward * moveInput.y + right * moveInput.x).normalized;
 
-        float control =
-            isGrounded
-            ? 1f
-            : airControlMultiplier;
-
-        Vector3 targetVelocity =
-            moveDirection *
-            currentSpeed *
-            control;
+        float control = isGrounded ? 1f : airControlMultiplier;
+        Vector3 targetVelocity = moveDirection * currentSpeed * control;
 
         Vector3 velocity = rb.linearVelocity;
+        Vector3 horizontalVelocity = new Vector3(velocity.x, 0f, velocity.z);
+        Vector3 targetHorizontal = new Vector3(targetVelocity.x, 0f, targetVelocity.z);
 
-        Vector3 horizontalVelocity =
-            new Vector3(
-                velocity.x,
-                0f,
-                velocity.z
-            );
+        float accel = moveDirection.sqrMagnitude > 0.01f ? acceleration : deceleration;
+        horizontalVelocity = Vector3.MoveTowards(horizontalVelocity, targetHorizontal, accel * Time.fixedDeltaTime);
 
-        Vector3 targetHorizontal =
-            new Vector3(
-                targetVelocity.x,
-                0f,
-                targetVelocity.z
-            );
-
-        float accel =
-            moveDirection.sqrMagnitude > 0.01f
-            ? acceleration
-            : deceleration;
-
-        horizontalVelocity = Vector3.MoveTowards(
-            horizontalVelocity,
-            targetHorizontal,
-            accel * Time.fixedDeltaTime
-        );
-
-        rb.linearVelocity = new Vector3(
-            horizontalVelocity.x,
-            velocity.y,
-            horizontalVelocity.z
-        );
+        rb.linearVelocity = new Vector3(horizontalVelocity.x, velocity.y, horizontalVelocity.z);
     }
 
     private void Jump()
     {
-        bool canJump =
-            Time.time <
-            lastGroundedTime + coyoteTime;
+        if (staminaManager == null) return;
+        if (!canJump) return;
 
-        if (!canJump)
-            return;
-
-        if (Time.time <
-            lastJumpTime + jumpCooldown)
-            return;
+        bool playerCanJump = Time.time < lastGroundedTime + coyoteTime;
+        if (!staminaManager.CanUseStamina(staminaManager.JumpStaminaCost))
+        {
+            staminaManager.staminaUI.BlinkColor(Color.red, 0.3f);
+            playerCanJump = false;
+        }
+        if (!playerCanJump) return;
+        if (Time.time < lastJumpTime + jumpCooldown) return;
 
         lastJumpTime = Time.time;
 
         Vector3 velocity = rb.linearVelocity;
         velocity.y = 0f;
-
         rb.linearVelocity = velocity;
 
-        rb.AddForce(
-            Vector3.up * jumpForce,
-            ForceMode.Impulse
-        );
+        rb.AddForce(Vector3.up * jumpForce, ForceMode.Impulse);
+
+        staminaManager.SetStamina(staminaManager.CurrentStamina - staminaManager.JumpStaminaCost);
+        playerCanJump = staminaManager.CanUseStamina(staminaManager.JumpStaminaCost);
 
         animator.ResetTrigger(JumpHash);
         animator.SetTrigger(JumpHash);
@@ -313,23 +305,10 @@ public class PlayerController : MonoBehaviour
 
     private void GroundCheck()
     {
-        Vector3 origin =
-            transform.position +
-            Vector3.up * 0.1f;
+        Vector3 origin = transform.position + Vector3.up * 0.1f;
+        float rayLength = (capsule.height / 2f) + groundCheckDistance;
 
-        float rayLength =
-            (capsule.height / 2f) +
-            groundCheckDistance;
-
-        isGrounded = Physics.SphereCast(
-            origin,
-            capsule.radius * 0.9f,
-            Vector3.down,
-            out _,
-            rayLength,
-            groundLayer,
-            QueryTriggerInteraction.Ignore
-        );
+        isGrounded = Physics.SphereCast(origin, capsule.radius * 0.9f, Vector3.down, out _, rayLength, groundLayer, QueryTriggerInteraction.Ignore);
 
         if (isGrounded)
             lastGroundedTime = Time.time;
@@ -337,127 +316,64 @@ public class PlayerController : MonoBehaviour
 
     private void HandleCrouch()
     {
-        bool crouchPressed =
-            crouchAction != null &&
-            crouchAction.action.IsPressed();
+        bool crouchPressed = crouchAction != null && crouchAction.action.IsPressed();
 
         if (crouchPressed)
         {
             isCrouching = true;
-
             targetCapsuleHeight = crouchHeight;
-
-            targetCapsuleCenter = new Vector3(
-                standingCenter.x,
-                crouchHeight / 2f,
-                standingCenter.z
-            );
+            targetCapsuleCenter = new Vector3(standingCenter.x, crouchHeight / 2f, standingCenter.z);
         }
         else if (CanStandUp())
         {
             isCrouching = false;
-
             targetCapsuleHeight = standingHeight;
             targetCapsuleCenter = standingCenter;
         }
 
-        capsule.height = Mathf.Lerp(
-            capsule.height,
-            targetCapsuleHeight,
-            Time.deltaTime * crouchSmoothSpeed
-        );
-
-        capsule.center = Vector3.Lerp(
-            capsule.center,
-            targetCapsuleCenter,
-            Time.deltaTime * crouchSmoothSpeed
-        );
+        capsule.height = Mathf.Lerp(capsule.height, targetCapsuleHeight, Time.deltaTime * crouchSmoothSpeed);
+        capsule.center = Vector3.Lerp(capsule.center, targetCapsuleCenter, Time.deltaTime * crouchSmoothSpeed);
     }
 
     private bool CanStandUp()
     {
         float radius = capsule.radius * 0.95f;
+        float halfHeight = standingHeight / 2f;
+        Vector3 center = transform.position + Vector3.up * halfHeight;
+        Vector3 point1 = center + Vector3.up * (halfHeight - radius);
+        Vector3 point2 = center - Vector3.up * (halfHeight - radius);
 
-        float halfHeight =
-            standingHeight / 2f;
-
-        Vector3 center =
-            transform.position +
-            Vector3.up * halfHeight;
-
-        Vector3 point1 =
-            center +
-            Vector3.up *
-            (halfHeight - radius);
-
-        Vector3 point2 =
-            center -
-            Vector3.up *
-            (halfHeight - radius);
-
-        Collider[] hits =
-            Physics.OverlapCapsule(
-                point1,
-                point2,
-                radius,
-                ~0,
-                QueryTriggerInteraction.Ignore
-            );
+        Collider[] hits = Physics.OverlapCapsule(point1, point2, radius, ~0, QueryTriggerInteraction.Ignore);
 
         foreach (Collider hit in hits)
         {
-            if (hit.transform.root == transform)
-                continue;
-
+            if (hit.transform.root == transform) continue;
             return false;
         }
-
         return true;
     }
 
     private void UpdateAnimator()
     {
-        bool moving =
-            moveInput.sqrMagnitude > 0.01f;
-
+        bool moving = moveInput.sqrMagnitude > 0.01f;
         float speed = 0f;
 
         if (moving)
         {
-            if (isCrouching)
-                speed = 0.3f;
-            else if (isSprinting)
-                speed = 1f;
-            else
-                speed = 0.5f;
+            if (isCrouching) speed = 0.3f;
+            else if (isSprinting) speed = 1f;
+            else speed = 0.5f;
         }
 
-        animator.SetFloat(
-            SpeedHash,
-            speed,
-            0.1f,
-            Time.deltaTime
-        );
-
-        animator.SetBool(
-            GroundedHash,
-            isGrounded
-        );
-
-        animator.SetBool(
-            CrouchingHash,
-            isCrouching
-        );
+        animator.SetFloat(SpeedHash, speed, 0.1f, Time.deltaTime);
+        animator.SetBool(GroundedHash, isGrounded);
+        animator.SetBool(CrouchingHash, isCrouching);
     }
 
     private void CameraLook()
     {
-        bool mouseScheme =
-            playerInput.currentControlScheme != null &&
-            playerInput.currentControlScheme.Contains("Mouse");
-
-        float x;
-        float y;
+        bool mouseScheme = playerInput.currentControlScheme != null && playerInput.currentControlScheme.Contains("Mouse");
+        float x, y;
 
         if (mouseScheme)
         {
@@ -466,103 +382,85 @@ public class PlayerController : MonoBehaviour
         }
         else
         {
-            x = lookInput.x *
-                gamepadSensitivity *
-                Time.deltaTime;
-
-            y = lookInput.y *
-                gamepadSensitivity *
-                Time.deltaTime;
+            x = lookInput.x * gamepadSensitivity * Time.deltaTime;
+            y = lookInput.y * gamepadSensitivity * Time.deltaTime;
         }
 
         yRotation += x;
-
         xRotation -= y;
+        xRotation = Mathf.Clamp(xRotation, -xClamp, xClamp);
 
-        xRotation = Mathf.Clamp(
-            xRotation,
-            -xClamp,
-            xClamp
-        );
+        Quaternion bodyRotation = Quaternion.Euler(0f, yRotation, 0f);
+        transform.rotation = smoothCamera ? Quaternion.Lerp(transform.rotation, bodyRotation, Time.deltaTime * horizontalSmoothSpeed) : bodyRotation;
 
-        Quaternion bodyRotation =
-            Quaternion.Euler(
-                0f,
-                yRotation,
-                0f
-            );
+        float targetLean = -moveInput.x * maxLeanAngle;
+        currentLean = Mathf.Lerp(currentLean, targetLean, Time.deltaTime * leanSmoothSpeed);
 
-        transform.rotation = smoothCamera
-            ? Quaternion.Lerp(
-                transform.rotation,
-                bodyRotation,
-                Time.deltaTime *
-                horizontalSmoothSpeed
-            )
-            : bodyRotation;
+        Quaternion cameraRotation = Quaternion.Euler(xRotation, 0f, currentLean + currentTilt);
 
-        float targetLean =
-            -moveInput.x * maxLeanAngle;
-
-        currentLean = Mathf.Lerp(
-            currentLean,
-            targetLean,
-            Time.deltaTime * leanSmoothSpeed
-        );
-
-        Quaternion cameraRotation =
-            Quaternion.Euler(
-                xRotation,
-                0f,
-                currentLean + currentTilt
-            );
-
-        playerCamera.transform.localRotation =
-            smoothCamera
-            ? Quaternion.Lerp(
-                playerCamera.transform.localRotation,
-                cameraRotation,
-                Time.deltaTime *
-                verticalSmoothSpeed
-            )
-            : cameraRotation;
-
-        playerCamera.transform.localPosition = Vector3.Lerp(
-                playerCamera.transform.localPosition,
-                capsule.center + Vector3.up * (capsule.height * 0.5f - 0.1f),
-                Time.deltaTime * crouchSmoothSpeed
-            );
+        playerCamera.transform.localRotation = smoothCamera ? Quaternion.Slerp(playerCamera.transform.localRotation, cameraRotation, Time.deltaTime * verticalSmoothSpeed) : cameraRotation;
+        playerCamera.transform.localPosition = Vector3.Lerp(playerCamera.transform.localPosition, capsule.center + Vector3.up * (capsule.height * 0.5f - 0.1f), Time.deltaTime * crouchSmoothSpeed);
     }
 
     private void UpdateCameraTilt()
     {
-        float targetTilt =
-            -rb.linearVelocity.x *
-            movementTiltAmount *
-            0.1f;
-
-        currentTilt = Mathf.Lerp(
-            currentTilt,
-            targetTilt,
-            Time.deltaTime *
-            movementTiltSmooth
-        );
+        float targetTilt = -rb.linearVelocity.x * movementTiltAmount * 0.1f;
+        currentTilt = Mathf.Lerp(currentTilt, targetTilt, Time.deltaTime * movementTiltSmooth);
     }
 
     private void UpdateFOV()
     {
-        float targetFOV =
-            isSprinting
-            ? sprintFOV
-            : (isCrouching
-                ? crouchFOV
-                : normalFOV);
+        float targetFOV;
 
-        playerCamera.fieldOfView =
-            Mathf.Lerp(
-                playerCamera.fieldOfView,
-                targetFOV,
-                Time.deltaTime * fovSmooth
-            );
+        if (staminaManager != null && staminaManager.CurrentStamina < staminaManager.maxStamina * 0.2f && isSprinting)
+        {
+            targetFOV = staminaLowFOV;
+        }
+        else if (isSprinting)
+        {
+            targetFOV = sprintFOV;
+        }
+        else if (isCrouching)
+        {
+            targetFOV = crouchFOV;
+        }
+        else
+        {
+            targetFOV = normalFOV;
+        }
+
+        playerCamera.fieldOfView = Mathf.Lerp(playerCamera.fieldOfView, targetFOV, Time.deltaTime * fovSmooth);
+    }
+
+    private void RegenerateStamina()
+    {
+        if (!isSprinting && !isCrouching && staminaManager.CurrentStamina < staminaManager.maxStamina)
+        {
+            staminaManager.SetStamina(staminaManager.CurrentStamina + staminaManager.StaminaRegenerationAmount * Time.deltaTime);
+        }
+        else if (isCrouching && staminaManager.CurrentStamina < staminaManager.maxStamina)
+        {
+            staminaManager.SetStamina(staminaManager.CurrentStamina + staminaManager.CrouchingStaminaRegenerationAmount * Time.deltaTime);
+        }
+        else if (isSprinting && staminaManager.CurrentStamina > staminaManager.minStamina)
+        {
+            if (!staminaManager.CanUseStamina(staminaManager.RunningStaminaCost))
+            {
+                if (!staminaEmptyBlinkPlayed)
+                {
+                    staminaEmptyBlinkPlayed = true;
+                    staminaManager.staminaUI.BlinkColor(Color.red, 0.2f);
+                }
+            }
+            else
+            {
+                staminaEmptyBlinkPlayed = false;
+
+                staminaManager.SetStamina(
+                    staminaManager.CurrentStamina -
+                    staminaManager.RunningStaminaCost * Time.deltaTime
+                );
+            }
+        }
     }
 }

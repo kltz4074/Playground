@@ -6,7 +6,8 @@ public class Flashlight : ItemBase
     [SerializeField] private Light flashlight;
     [SerializeField] private InputActionReference activateReference;
 
-    private bool isEnabled = false;
+    public bool isEnabled = false;
+
 
     private void OnEnable()
     {
@@ -20,13 +21,17 @@ public class Flashlight : ItemBase
         activateReference.action.Disable();
     }
 
-    public override void OnItemUpdate()
+    public void Start()
     {
+        flashlight.enabled = isEnabled;
     }
 
     private void OnActivate(InputAction.CallbackContext context)
     {
-        isEnabled = !isEnabled;
-        flashlight.enabled = isEnabled;
+        if (Grabbed)
+        {
+            isEnabled = !isEnabled;
+            flashlight.enabled = isEnabled;
+        }
     }
 }
